@@ -1,0 +1,9 @@
+## PreReq  Install collectd and get the collctd-tg package 
+
+./collectd-tg -n 100 -D 8096 -d 0.0.0.0  &  
+
+## Run the binary 
+./bin/influxdb-collectd-proxy -database new -influxdb  http://localhost:8087 -typesdb ./types.db    -verbose & 
+
+## Listen on the port for influx 
+ while true ; do echo OK | nc -l 8087 ; done 
