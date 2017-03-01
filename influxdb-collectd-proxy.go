@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"math"
 	"os"
@@ -160,6 +161,7 @@ func main() {
 			log.Printf("[TRACE] got a packet: %v\n", packet)
 		}
 		// for all metrics in the packet
+
 		for i, _ := range packet.ValueNames() {
 			values, _ := packet.ValueNumbers()
 			cnt++
@@ -197,11 +199,16 @@ func main() {
 			}
 
 			name := hostName + "." + pluginName + "." + typeName
+
+			//name := fmt.Sprintf("%s_%s", packet.Identifier.Plugin, packet.DSName(i))
+
 			nameNoHostname := pluginName + "." + typeName
 			// influxdb stuffs
 			timestamp := packet.Time().UnixNano() / 1000000
 			value := values[i].Float64()
 			dataType := packet.DataTypes[i]
+			var kind string
+			kind = types[packet.Type][i][0]
 			readyToSend := true
 			normalizedValue := value
 
@@ -242,24 +249,51 @@ func main() {
 					columns = append(columns, "plugin")
 					points_values = append(points_values, pluginName)
 				}
-				//tags := map[string]string{columns}
-				//fields := map[string]interface{}{points_values}
 				tags := make(map[string]string)
-				i := 0
-				for range columns {
-					tags[columns[i]] = ""
-					i++
+				fields := make(map[string]interface{})
+				var tsname string
+				//if packet.Type != "" {
+				if kind != "" {
+					tsname = fmt.Sprintf("%s_%s", packet.Plugin, kind)
+				} else {
+					tsname = fmt.Sprintf("%s_value", packet.Plugin)
 				}
+				//tsname = name_value
+				//dataType
+				// Convert interface back to actual type, then to float64
+				switch packet.DataTypes[i] {
+				case collectd.TypeGauge:
+					fields["value"] = float64(normalizedValue)
+				case collectd.TypeDerive:
+					fields["value"] = float64(normalizedValue)
+				case collectd.TypeCounter:
+					fields["value"] = float64(normalizedValue)
+				}
+
+				if hostName != "" {
+					tags["host"] = packet.Hostname
+				}
+				if packet.PluginInstance != "" {
+					tags["instance"] = packet.PluginInstance
+				}
+				if packet.Type != "" {
+					tags["type"] = packet.Type
+				}
+				if packet.TypeInstance != "" {
+					tags["type_instance"] = packet.TypeInstance
+				}
+				log.Printf("name_value= %s AND  NAME :%s", name_value, tsname)
+				// Create Influx Point
 				pt, err := influxdb.NewPoint(
-					name_value,
+					//name_value,
+					tsname,
 					tags,
-					map[string]interface{}{
-						"value": normalizedValue,
-					},
+					//map[string]interface{}{"value": normalizedValue,},
+					fields,
 					packet.Time(),
 				)
 				if err != nil {
-					println("Error:", err.Error())
+					log.Printf("Error:", err.Error())
 					continue
 				}
 				bp.AddPoint(pt)
